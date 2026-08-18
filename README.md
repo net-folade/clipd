@@ -1,7 +1,7 @@
 # Clipd
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
+![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20·%20Apple%20Silicon-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -39,8 +39,12 @@ no third-party dependencies, MIT licensed.
 
 ## Install (no building required)
 
+> **Apple Silicon only.** Clipd runs on M-series Macs (M1 and later) with
+> macOS 14+. Intel Macs are not supported.
+
 1. Download `Clipd.app.zip` from the latest
-   [GitHub Release](../../releases/latest) and unzip it.
+   [GitHub Release](https://github.com/net-folade/clipd/releases/latest)
+   and unzip it.
 2. Drag `Clipd.app` into `/Applications`.
 3. First launch only: macOS quarantines apps downloaded from the internet, and
    Clipd isn't notarized. Either right-click `Clipd.app` → **Open** → **Open**,
