@@ -1,5 +1,6 @@
 # Clipd
 
+[![CI](https://github.com/net-folade/clipd/actions/workflows/ci.yml/badge.svg)](https://github.com/net-folade/clipd/actions/workflows/ci.yml)
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20·%20Apple%20Silicon-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
@@ -78,6 +79,22 @@ the framework search paths a CLT-only toolchain needs for Swift Testing).
 Clipd is ad-hoc signed, not notarized (notarization requires a paid Apple
 Developer account and isn't needed for personal use). On first launch,
 right-click `Clipd.app` → **Open** → **Open** to get past Gatekeeper.
+
+## Contributing
+
+Contributions are welcome — bug fixes, features, docs, tests, all of it.
+
+- **Found a bug?** Open an [issue](https://github.com/net-folade/clipd/issues)
+  with your macOS version and what you did.
+- **Have a fix or a feature?** Send a pull request. For anything sizeable, an
+  issue first is appreciated so we can agree on the shape before you write it,
+  but it isn't required.
+- **Before you push:** run `Scripts/test.sh` and add a test for new behavior.
+  Every PR runs `swift build` and `swift test` in CI.
+
+Two things stay non-negotiable: no third-party dependencies, and no networking
+code. Those are the point of the project. The "out of scope for v1" list below
+is about what I didn't build yet, not about what I'd refuse.
 
 ## Out of scope for v1
 
