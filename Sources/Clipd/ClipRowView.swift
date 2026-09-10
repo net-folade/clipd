@@ -21,10 +21,6 @@ struct ClipRowView: View {
                         Text("Copied")
                             .font(.caption)
                             .foregroundStyle(palette.text)
-                    } else {
-                        Text(item.createdAt, style: .relative)
-                            .font(.caption)
-                            .foregroundStyle(palette.dim)
                     }
                     Spacer()
                     Button(action: onTogglePin) {
