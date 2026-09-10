@@ -6,7 +6,6 @@ struct ClipdApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store: HistoryStore
     @StateObject private var monitor: ClipboardMonitor
-    @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
 
     init() {
         let store = HistoryStore()
@@ -17,16 +16,13 @@ struct ClipdApp: App {
         AppDelegate.store = store
     }
 
-    private var preferredScheme: ColorScheme? {
-        AppearanceMode(rawValue: appearanceRaw)?.colorScheme
-    }
-
+    // ContentView owns the appearance preference now — a preferredColorScheme
+    // applied out here never reached the MenuBarExtra popover.
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(monitor)
-                .preferredColorScheme(preferredScheme)
         }
         .defaultSize(width: 360, height: 480)
 
@@ -34,7 +30,6 @@ struct ClipdApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(monitor)
-                .preferredColorScheme(preferredScheme)
                 .frame(width: 340, height: 460)
         }
         .menuBarExtraStyle(.window)
@@ -46,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var store: HistoryStore?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppearanceMode.stored().apply()
         let showDockIcon = UserDefaults.standard.object(forKey: "showDockIcon") as? Bool ?? true
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         NSApp.activate(ignoringOtherApps: true)
