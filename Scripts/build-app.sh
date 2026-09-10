@@ -58,6 +58,24 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 # 4. Ad-hoc codesign — gives the app a stable identity across rebuilds.
+# Strip xattrs first: codesign refuses to seal a bundle carrying Finder info or
+# resource forks ("detritus not allowed").
+xattr -cr "$APP"
 codesign --force --sign - "$APP"
 
+# 5. Zip for distribution. Must be ditto, not zip: plain zip stores xattrs as
+# AppleDouble (._Clipd) files that land inside the bundle on extraction and
+# break the signature seal for whoever downloads it.
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$APP.zip"
+
+# 6. Verify the extracted copy — that's what a downloader actually runs. Don't
+# verify "$APP" in place: if this folder syncs to iCloud Drive, the .app gets
+# re-stamped with com.apple.FinderInfo within seconds of signing, so an on-disk
+# check fails even when the archived copy is perfectly fine.
+VERIFY_DIR="$(mktemp -d)"
+ditto -x -k "$APP.zip" "$VERIFY_DIR"
+codesign --verify --deep --strict "$VERIFY_DIR/$APP"
+rm -rf "$VERIFY_DIR"
+
 echo "Built $ROOT/$APP"
+echo "Packaged $ROOT/$APP.zip (signature verified from the archive)"

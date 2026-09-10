@@ -2,3 +2,6 @@
 *.app
 .DS_Store
 plan.md
+
+# Build artifact produced by Scripts/build-app.sh
+*.app.zip
