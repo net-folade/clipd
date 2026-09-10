@@ -1,7 +1,7 @@
 # Clipd
 
 [![CI](https://github.com/net-folade/clipd/actions/workflows/ci.yml/badge.svg)](https://github.com/net-folade/clipd/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.1-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20·%20Apple%20Silicon-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)

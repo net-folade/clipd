@@ -4,12 +4,27 @@ struct ContentView: View {
     @EnvironmentObject private var store: HistoryStore
     @EnvironmentObject private var monitor: ClipboardMonitor
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(AppearanceMode.storageKey) private var appearanceRaw = AppearanceMode.system.rawValue
 
     @State private var query = ""
     @State private var showClearConfirm = false
     @State private var copiedID: UUID?
 
-    private var palette: Palette { Palette.resolve(colorScheme) }
+    private var appearance: AppearanceMode {
+        AppearanceMode(rawValue: appearanceRaw) ?? .system
+    }
+
+    // Read the preference here rather than inheriting \.colorScheme: a
+    // preferredColorScheme set on the Scene does not reach the MenuBarExtra
+    // popover, so the environment stays on the system value and the palette
+    // never followed the Theme picker.
+    private var palette: Palette {
+        switch appearance {
+        case .light: return .light
+        case .dark: return .dark
+        case .system: return Palette.resolve(colorScheme)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,6 +43,7 @@ struct ContentView: View {
         }
         .background(palette.background)
         .frame(minWidth: 320, minHeight: 400)
+        .preferredColorScheme(appearance.colorScheme)
     }
 
     private var clearConfirmBar: some View {

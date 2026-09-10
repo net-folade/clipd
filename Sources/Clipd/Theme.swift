@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum AppearanceMode: String, CaseIterable, Identifiable {
@@ -23,6 +24,23 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         case .light: return .light
         case .dark: return .dark
         }
+    }
+
+    /// Forces the AppKit appearance for the whole process. `preferredColorScheme`
+    /// alone never reaches the MenuBarExtra popover window or the native menus
+    /// inside it, so without this the chrome stays on the system appearance.
+    @MainActor
+    func apply() {
+        switch self {
+        case .system: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+
+    /// The mode currently persisted in user defaults.
+    static func stored(in defaults: UserDefaults = .standard) -> AppearanceMode {
+        AppearanceMode(rawValue: defaults.string(forKey: storageKey) ?? "") ?? .system
     }
 }
 

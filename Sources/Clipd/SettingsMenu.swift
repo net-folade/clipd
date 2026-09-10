@@ -33,5 +33,8 @@ struct SettingsMenu: View {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+        .onChange(of: appearanceRaw) { _, newValue in
+            (AppearanceMode(rawValue: newValue) ?? .system).apply()
+        }
     }
 }
