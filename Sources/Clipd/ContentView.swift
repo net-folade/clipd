@@ -9,6 +9,11 @@ struct ContentView: View {
     @State private var query = ""
     @State private var showClearConfirm = false
     @State private var copiedID: UUID?
+    @State private var selectedID: UUID?
+    @FocusState private var searchFocused: Bool
+
+    /// The menu bar popover dismisses on Return/Escape; the Dock window stays put.
+    var isPopover = false
 
     private var appearance: AppearanceMode {
         AppearanceMode(rawValue: appearanceRaw) ?? .system
@@ -44,6 +49,15 @@ struct ContentView: View {
         .background(palette.background)
         .frame(minWidth: 320, minHeight: 400)
         .preferredColorScheme(appearance.colorScheme)
+        // Runs on every popover open, not just the first: the popover keeps
+        // this view alive between opens, so start each one fresh.
+        .onAppear {
+            searchFocused = true
+            selectedID = nil
+        }
+        .onChange(of: query) { _, newValue in
+            selectedID = store.filtered(query: newValue).first?.id
+        }
     }
 
     private var clearConfirmBar: some View {
@@ -109,6 +123,22 @@ struct ContentView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundStyle(palette.text)
+                    .focused($searchFocused)
+                    // Keys are handled on the field itself because it keeps
+                    // focus while the user types; onKeyPress sees the arrows
+                    // before the field editor uses them to move the caret.
+                    .onKeyPress(.upArrow) {
+                        moveSelection(by: -1)
+                        return .handled
+                    }
+                    .onKeyPress(.downArrow) {
+                        moveSelection(by: 1)
+                        return .handled
+                    }
+                    .onSubmit(copySelectionAndDismiss)
+                    .onExitCommand {
+                        if isPopover { MenuBarPopover.dismiss() }
+                    }
             }
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(palette.surface))
@@ -121,21 +151,27 @@ struct ContentView: View {
         let results = store.filtered(query: query)
         let pinned = results.filter(\.isPinned)
         let unpinned = results.filter { !$0.isPinned }
-        return ScrollView {
-            if results.isEmpty {
-                emptyState
-            } else {
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    if !pinned.isEmpty {
-                        sectionHeader("Pinned")
-                        ForEach(pinned) { row(for: $0) }
+        return ScrollViewReader { proxy in
+            ScrollView {
+                if results.isEmpty {
+                    emptyState
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        if !pinned.isEmpty {
+                            sectionHeader("Pinned")
+                            ForEach(pinned) { row(for: $0) }
+                        }
+                        if !pinned.isEmpty && !unpinned.isEmpty {
+                            sectionHeader("Recent")
+                        }
+                        ForEach(unpinned) { row(for: $0) }
                     }
-                    if !pinned.isEmpty && !unpinned.isEmpty {
-                        sectionHeader("Recent")
-                    }
-                    ForEach(unpinned) { row(for: $0) }
+                    .padding(10)
                 }
-                .padding(10)
+            }
+            .onChange(of: selectedID) { _, id in
+                // No anchor: scroll only as far as needed to reveal the row.
+                if let id { proxy.scrollTo(id) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,6 +189,7 @@ struct ContentView: View {
             item: item,
             palette: palette,
             isCopied: copiedID == item.id,
+            isSelected: selectedID == item.id,
             onCopy: { copy(item) },
             onTogglePin: { store.togglePin(item) }
         )
@@ -197,5 +234,31 @@ struct ContentView: View {
                 copiedID = nil
             }
         }
+    }
+
+    // filtered(query:) already returns pinned then recent, the displayed order.
+    private func moveSelection(by offset: Int) {
+        let ids = store.filtered(query: query).map(\.id)
+        selectedID = ListSelection.moved(selectedID, by: offset, in: ids)
+    }
+
+    private func copySelectionAndDismiss() {
+        let results = store.filtered(query: query)
+        guard let item = results.first(where: { $0.id == selectedID }) ?? results.first else { return }
+        copy(item)
+        if isPopover { MenuBarPopover.dismiss() }
+    }
+}
+
+/// Arrow-key movement through the visible results, kept free of view state so
+/// it can be unit-tested.
+enum ListSelection {
+    /// The id `offset` rows away from `current`, clamped to the ends. With no
+    /// selection, or one that is no longer visible, any move lands on the first
+    /// row, so the first Down press highlights the top result.
+    static func moved(_ current: UUID?, by offset: Int, in ids: [UUID]) -> UUID? {
+        guard !ids.isEmpty else { return nil }
+        guard let current, let index = ids.firstIndex(of: current) else { return ids.first }
+        return ids[min(max(index + offset, 0), ids.count - 1)]
     }
 }

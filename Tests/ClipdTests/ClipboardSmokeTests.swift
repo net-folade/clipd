@@ -75,6 +75,32 @@ final class ClipboardSmokeTests {
         #expect(pasteboard.string(forType: .string) == "original")
     }
 
+    /// A monitor with an isolated defaults suite and a stubbed frontmost app, so
+    /// the result doesn't depend on the real preferences or which app is in front.
+    private func makeMonitor(ignoring ignored: [String], frontmost: String) throws -> ClipboardMonitor {
+        let defaults = try #require(UserDefaults(suiteName: "ClipdTests-\(UUID().uuidString)"))
+        defaults.set(ignored, forKey: ClipboardMonitor.ignoredAppsKey)
+        return ClipboardMonitor(store: store, defaults: defaults, frontmostBundleID: { frontmost })
+    }
+
+    @Test func copyFromIgnoredAppIsNotRecorded() throws {
+        let monitor = try makeMonitor(ignoring: ["com.example.vault"], frontmost: "com.example.vault")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("from ignored app", forType: .string)
+        monitor.poll()
+        #expect(store.items.isEmpty)
+    }
+
+    @Test func copyFromOtherAppIsRecorded() throws {
+        let monitor = try makeMonitor(ignoring: ["com.example.vault"], frontmost: "com.example.editor")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("from regular app", forType: .string)
+        monitor.poll()
+        #expect(store.items.map(\.text) == ["from regular app"])
+    }
+
     @Test func pausedMonitorRecordsNothing() {
         monitor.isPaused = true
         let pasteboard = NSPasteboard.general
