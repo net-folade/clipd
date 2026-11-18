@@ -27,7 +27,7 @@ struct ClipdApp: App {
         .defaultSize(width: 360, height: 480)
 
         MenuBarExtra("Clipd", systemImage: "doc.on.clipboard") {
-            ContentView()
+            ContentView(isPopover: true)
                 .environmentObject(store)
                 .environmentObject(monitor)
                 .frame(width: 340, height: 460)
@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let showDockIcon = UserDefaults.standard.object(forKey: "showDockIcon") as? Bool ?? true
         NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
         NSApp.activate(ignoringOtherApps: true)
+        HotKey.shared.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

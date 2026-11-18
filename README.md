@@ -1,7 +1,7 @@
 # Clipd
 
 [![CI](https://github.com/net-folade/clipd/actions/workflows/ci.yml/badge.svg)](https://github.com/net-folade/clipd/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-1.0.1-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20·%20Apple%20Silicon-lightgrey)
 ![Swift](https://img.shields.io/badge/Swift-6-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -15,8 +15,13 @@ no third-party dependencies, MIT licensed.
 
 ## Features
 
-- Keeps your last 30 copied text snippets (pinned items don't count against the cap)
+- Keeps your last 30 copied text snippets — or 10, 50, 100 or 200 (pinned items
+  don't count against the cap)
 - Click an item to copy it back to the clipboard
+- Press **⌥⌘V** anywhere to open Clipd, ↑/↓ to pick, Return to copy and jump back
+  to the app you were in, Esc to dismiss (the shortcut can be turned off in settings)
+- Ignore specific apps so nothing copied while they're in front is recorded
+- Optional launch at login
 - Search, pin favorites, clear history (pinned items survive unless you say otherwise)
 - Pause recording any time
 - Midnight-black dark theme and beige light theme, or follow the system
@@ -30,12 +35,21 @@ no third-party dependencies, MIT licensed.
 - **Password managers are respected.** Payloads marked with the standard
   [nspasteboard.org](http://nspasteboard.org) concealed/transient/auto-generated
   types are never recorded. There's also a Pause toggle for manual credential handling.
+- **Sandboxed.** Clipd runs in the macOS App Sandbox: it can't read or write
+  your files outside its own container and has no network access of its own.
 - **One small file.** History lives in
-  `~/Library/Application Support/Clipd/history.json` with owner-only (`0600`)
-  permissions, capped at 30 unpinned items. Delete the file and it's gone.
+  `~/Library/Containers/com.folade.clipd/Data/Library/Application Support/Clipd/history.json`
+  with owner-only (`0600`) permissions, capped at your chosen history size (30
+  unpinned items by default). Delete the file and it's gone. Upgrading from
+  1.0.x? The first time the sandboxed version runs, macOS moves your old
+  `~/Library/Application Support/Clipd/` history and your settings into the
+  container. The move is one-way (1.0.x won't find them afterwards), and it
+  only happens when the container is first created — if history is missing,
+  look in the old folder.
 - **Not encrypted at rest.** FileVault is the real protection here. Note that
-  `~/Library/Application Support/` is included in Time Machine and most cloud
-  backups, so a copied secret can outlive the 30-item cap inside a backup.
+  `~/Library/Containers/` is included in Time Machine and most cloud
+  backups, so a copied secret can outlive the history cap inside a backup.
+- **Privacy policy:** see [PRIVACY.md](PRIVACY.md).
 - **No third-party dependencies** — no supply-chain surface.
 
 ## Install (no building required)
@@ -98,8 +112,7 @@ is about what I didn't build yet, not about what I'd refuse.
 
 ## Out of scope for v1
 
-Images/files, global hotkey, auto-paste, launch-at-login, sync, encryption at
-rest, configurable history size.
+Images/files, auto-paste, sync, encryption at rest.
 
 ## License
 

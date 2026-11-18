@@ -4,14 +4,40 @@ import Foundation
 final class HistoryStore: ObservableObject {
     @Published private(set) var items: [ClipItem] = []
 
-    static let maxUnpinned = 30
+    static let defaultMaxUnpinned = 30
+    static let limitKey = "historyLimit"
+    static let limitOptions = [10, 30, 50, 100, 200]
+
+    /// Lowering the limit trims history right away, so the list never holds more
+    /// than the user just chose.
+    var maxUnpinned: Int {
+        didSet {
+            // Reject anything the picker doesn't offer: a hand-edited default
+            // like 0 would otherwise wipe all unpinned history.
+            guard Self.limitOptions.contains(maxUnpinned) else {
+                maxUnpinned = oldValue
+                return
+            }
+            enforceCap()
+            scheduleSave()
+        }
+    }
 
     private let storageURL: URL
     private var saveTask: Task<Void, Never>?
 
-    init(storageURL: URL? = nil) {
+    init(storageURL: URL? = nil, defaults: UserDefaults = .standard) {
         self.storageURL = storageURL ?? Self.defaultStorageURL()
+        self.maxUnpinned = Self.storedLimit(in: defaults)
         load()
+    }
+
+    /// Only values the settings picker offers are accepted, so a hand-edited or
+    /// stale preference can't produce a zero or runaway cap.
+    static func storedLimit(in defaults: UserDefaults) -> Int {
+        guard let stored = defaults.object(forKey: limitKey) as? Int,
+              limitOptions.contains(stored) else { return defaultMaxUnpinned }
+        return stored
     }
 
     static func defaultStorageURL() -> URL {
@@ -60,9 +86,9 @@ final class HistoryStore: ObservableObject {
 
     private func enforceCap() {
         var unpinned = items.filter { !$0.isPinned }.count
-        guard unpinned > Self.maxUnpinned else { return }
+        guard unpinned > maxUnpinned else { return }
         var index = items.count - 1
-        while unpinned > Self.maxUnpinned && index >= 0 {
+        while unpinned > maxUnpinned && index >= 0 {
             if !items[index].isPinned {
                 items.remove(at: index)
                 unpinned -= 1
@@ -106,5 +132,7 @@ final class HistoryStore: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         guard let decoded = try? decoder.decode([ClipItem].self, from: data) else { return }
         items = decoded
+        // The limit may have been lowered since this file was saved.
+        enforceCap()
     }
 }

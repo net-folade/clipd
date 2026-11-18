@@ -6,19 +6,24 @@ import Testing
 @MainActor
 final class HistoryStoreTests {
     private let tempURL: URL
+    // Isolated suite so the history limit never comes from the real preferences.
+    private let defaultsSuite = "ClipdTests-\(UUID().uuidString)"
+    private let defaults: UserDefaults
 
-    init() {
+    init() throws {
         tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipdTests-\(UUID().uuidString)")
             .appendingPathComponent("history.json")
+        defaults = try #require(UserDefaults(suiteName: defaultsSuite))
     }
 
     deinit {
         try? FileManager.default.removeItem(at: tempURL.deletingLastPathComponent())
+        UserDefaults.standard.removePersistentDomain(forName: defaultsSuite)
     }
 
     private func makeStore() -> HistoryStore {
-        HistoryStore(storageURL: tempURL)
+        HistoryStore(storageURL: tempURL, defaults: defaults)
     }
 
     // MARK: - add / dedup
@@ -62,10 +67,11 @@ final class HistoryStoreTests {
 
     @Test func capEvictsOldestUnpinned() {
         let store = makeStore()
-        for i in 1...(HistoryStore.maxUnpinned + 5) {
+        #expect(store.maxUnpinned == 30)
+        for i in 1...(store.maxUnpinned + 5) {
             store.add("item \(i)")
         }
-        #expect(store.items.count == HistoryStore.maxUnpinned)
+        #expect(store.items.count == store.maxUnpinned)
         #expect(store.items.first?.text == "item 35")
         #expect(store.items.last?.text == "item 6", "oldest five evicted")
     }
@@ -74,12 +80,63 @@ final class HistoryStoreTests {
         let store = makeStore()
         store.add("keep me")
         store.togglePin(store.items[0])
-        for i in 1...(HistoryStore.maxUnpinned + 10) {
+        for i in 1...(store.maxUnpinned + 10) {
             store.add("filler \(i)")
         }
         #expect(store.items.contains { $0.text == "keep me" && $0.isPinned })
-        #expect(store.items.filter { !$0.isPinned }.count == HistoryStore.maxUnpinned)
-        #expect(store.items.count == HistoryStore.maxUnpinned + 1)
+        #expect(store.items.filter { !$0.isPinned }.count == store.maxUnpinned)
+        #expect(store.items.count == store.maxUnpinned + 1)
+    }
+
+    // MARK: - history limit setting
+
+    @Test func limitIsReadFromDefaults() {
+        defaults.set(100, forKey: HistoryStore.limitKey)
+        #expect(makeStore().maxUnpinned == 100)
+    }
+
+    @Test func invalidStoredLimitFallsBackToDefault() {
+        for garbage: Any in [7, 0, -50, "fifty"] {
+            defaults.set(garbage, forKey: HistoryStore.limitKey)
+            #expect(makeStore().maxUnpinned == HistoryStore.defaultMaxUnpinned)
+        }
+    }
+
+    @Test func invalidLimitIsRejectedWithoutEvicting() {
+        let store = makeStore()
+        for i in 1...5 {
+            store.add("item \(i)")
+        }
+        store.maxUnpinned = 0
+        #expect(store.maxUnpinned == HistoryStore.defaultMaxUnpinned)
+        #expect(store.items.count == 5, "an out-of-range limit must not wipe history")
+    }
+
+    @Test func loadTrimsHistorySavedUnderAHigherLimit() {
+        defaults.set(50, forKey: HistoryStore.limitKey)
+        let store = makeStore()
+        for i in 1...40 {
+            store.add("item \(i)")
+        }
+        store.saveNow()
+
+        defaults.set(10, forKey: HistoryStore.limitKey)
+        let reloaded = makeStore()
+        #expect(reloaded.items.count == 10)
+        #expect(reloaded.items.first?.text == "item 40")
+    }
+
+    @Test func loweringLimitEvictsOldestUnpinnedImmediately() {
+        let store = makeStore()
+        store.add("keep me")
+        store.togglePin(store.items[0])
+        for i in 1...20 {
+            store.add("item \(i)")
+        }
+        store.maxUnpinned = 10
+        #expect(store.items.filter { !$0.isPinned }.map(\.text) == (11...20).reversed().map { "item \($0)" })
+        #expect(store.items.contains { $0.text == "keep me" && $0.isPinned })
+        #expect(store.items.count == 11)
     }
 
     // MARK: - pin / clear

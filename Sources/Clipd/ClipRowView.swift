@@ -4,6 +4,7 @@ struct ClipRowView: View {
     let item: ClipItem
     let palette: Palette
     let isCopied: Bool
+    let isSelected: Bool
     let onCopy: () -> Void
     let onTogglePin: () -> Void
 
@@ -39,7 +40,9 @@ struct ClipRowView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(palette.border)
+                    // The keyboard selection: palette.border is too faint
+                    // against surface to read as a highlight in either palette.
+                    .strokeBorder(isSelected ? palette.dim : palette.border, lineWidth: isSelected ? 1.5 : 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
