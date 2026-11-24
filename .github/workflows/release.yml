@@ -1,0 +1,180 @@
+name: Release
+
+# Two tag shapes, two independent releases:
+#
+#   v1.2.3        -> Apple Silicon (arm64) Clipd.app.zip, marked Latest
+#   intel-v1.2.3  -> Intel (x86_64) Clipd-intel.app.zip, never marked Latest
+#
+# They are deliberately decoupled so the Intel build can lag behind without
+# holding up an Apple Silicon release. A trailing -rc.N on either publishes as
+# a prerelease.
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'intel-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (e.g. v1.2.0 or intel-v1.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Each arch builds and tests natively on its own runner, picked by the tag.
+    runs-on: ${{ startsWith(github.event.inputs.tag || github.ref_name, 'intel-v') && 'macos-26-intel' || 'macos-26' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve tag, arch and version
+        id: v
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          case "$TAG" in
+            intel-v*)
+              version="${TAG#intel-v}"
+              arch=x86_64; zip=Clipd-intel.app.zip; label="Intel"
+              # Intel never takes the Latest slot; Apple Silicon owns it.
+              latest=false
+              ;;
+            v*)
+              version="${TAG#v}"
+              arch=arm64; zip=Clipd.app.zip; label="Apple Silicon"
+              latest=true
+              ;;
+            *)
+              echo "::error::tag '$TAG' is neither v* nor intel-v*"
+              exit 1
+              ;;
+          esac
+
+          # Tests must run on the arch we ship.
+          if [ "$(uname -m)" != "$arch" ]; then
+            echo "::error::runner is $(uname -m), expected $arch"
+            exit 1
+          fi
+
+          # 1.2.0-rc.1 -> Info.plist still carries 1.2.0.
+          base="${version%%-*}"
+          if [ "$version" = "$base" ]; then
+            prerelease=
+          else
+            prerelease=--prerelease
+            # A prerelease is never Latest, whichever arch it is.
+            latest=false
+          fi
+
+          {
+            echo "tag=$TAG"
+            echo "arch=$arch"
+            echo "zip=$zip"
+            echo "label=$label"
+            echo "version=$version"
+            echo "base=$base"
+            echo "latest=$latest"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      # The version lives in the Info.plist heredoc in build-app.sh.
+      - name: Check version matches the tag
+        env:
+          BASE: ${{ steps.v.outputs.base }}
+        run: |
+          plist=$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' Scripts/build-app.sh)
+          if [ "$plist" != "$BASE" ]; then
+            echo "::error file=Scripts/build-app.sh::CFBundleShortVersionString is '$plist', expected $BASE"
+            exit 1
+          fi
+          echo "ok: $plist"
+
+      - name: Select the newest installed Xcode
+        run: |
+          newest=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$newest" ]; then sudo xcode-select -s "$newest"; fi
+          swift --version
+          uname -m
+
+      - name: Test
+        run: swift test
+
+      - name: Build Clipd.app
+        env:
+          ARCH: ${{ steps.v.outputs.arch }}
+        run: |
+          Scripts/build-app.sh "$ARCH"
+          # Guards a manual rebuild of a pre-split tag, whose script ignores
+          # the arch argument and may build a universal binary.
+          test "$(lipo -archs Clipd.app/Contents/MacOS/Clipd)" = "$ARCH"
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ steps.v.outputs.base }}
+          LABEL: ${{ steps.v.outputs.label }}
+          ZIP: ${{ steps.v.outputs.zip }}
+        run: |
+          awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { inside = 1; next }
+            inside && /^## \[/ { exit }
+            inside { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "::warning::no CHANGELOG entry for $VERSION"
+            : > notes.md
+          fi
+          # printf, not a heredoc: a heredoc terminator indented to match the
+          # YAML block would never close it.
+          printf '%s\n' \
+            '' \
+            '### Install' \
+            '' \
+            "\`$ZIP\` is for **$LABEL** Macs, macOS 14 or newer." \
+            'Builds for the other architecture are released separately.' \
+            '' \
+            'Unzip it and drag `Clipd.app` into `/Applications`.' \
+            "Clipd is ad-hoc signed, not notarized, so first launch needs one extra step: right-click \`Clipd.app\` → **Open** → **Open**, or clear the quarantine flag:" \
+            '' \
+            '```sh' \
+            'xattr -d com.apple.quarantine /Applications/Clipd.app' \
+            '```' \
+            >> notes.md
+          cat notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+          LABEL: ${{ steps.v.outputs.label }}
+          VERSION: ${{ steps.v.outputs.version }}
+          LATEST: ${{ steps.v.outputs.latest }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+          ZIP: ${{ steps.v.outputs.zip }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading asset with --clobber."
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            # --latest=false keeps an Intel release from displacing the Apple
+            # Silicon one at the top of the releases page.
+            gh release create "$TAG" "$ZIP" \
+              --title "Clipd $VERSION ($LABEL)" \
+              --notes-file notes.md \
+              --latest="$LATEST" \
+              $PRERELEASE
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clipd-${{ steps.v.outputs.version }}-${{ steps.v.outputs.arch }}
+          path: ${{ steps.v.outputs.zip }}
+          retention-days: 14
