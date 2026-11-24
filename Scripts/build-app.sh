@@ -5,13 +5,19 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/Scripts/swiftpm-env.sh"
 cd "$ROOT"
 
-# 1. Release build — universal if possible, arm64-only fallback.
-if swift build -c release --arch arm64 --arch x86_64; then
-  BIN=.build/apple/Products/Release/Clipd
-else
-  echo "warning: universal build failed; falling back to arm64 only"
-  swift build -c release
-  BIN=.build/release/Clipd
+# 1. Release build for one architecture: arm64 (default) or x86_64 (Intel).
+ARCH="${1:-arm64}"
+case "$ARCH" in
+  arm64)  ZIP=Clipd.app.zip ;;
+  x86_64) ZIP=Clipd-intel.app.zip ;;
+  *) echo "usage: $0 [arm64|x86_64]" >&2; exit 1 ;;
+esac
+TRIPLE="$ARCH-apple-macosx14.0"
+swift build -c release --triple "$TRIPLE"
+BIN="$(swift build -c release --triple "$TRIPLE" --show-bin-path)/Clipd"
+if [ "$(lipo -archs "$BIN")" != "$ARCH" ]; then
+  echo "error: $BIN is $(lipo -archs "$BIN"), expected $ARCH" >&2
+  exit 1
 fi
 
 # 2. Assemble the bundle.
@@ -80,16 +86,16 @@ codesign --force --sign - --entitlements Resources/Clipd.entitlements "$APP"
 # 5. Zip for distribution. Must be ditto, not zip: plain zip stores xattrs as
 # AppleDouble (._Clipd) files that land inside the bundle on extraction and
 # break the signature seal for whoever downloads it.
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$APP.zip"
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 # 6. Verify the extracted copy — that's what a downloader actually runs. Don't
 # verify "$APP" in place: if this folder syncs to iCloud Drive, the .app gets
 # re-stamped with com.apple.FinderInfo within seconds of signing, so an on-disk
 # check fails even when the archived copy is perfectly fine.
 VERIFY_DIR="$(mktemp -d)"
-ditto -x -k "$APP.zip" "$VERIFY_DIR"
+ditto -x -k "$ZIP" "$VERIFY_DIR"
 codesign --verify --deep --strict "$VERIFY_DIR/$APP"
 rm -rf "$VERIFY_DIR"
 
 echo "Built $ROOT/$APP"
-echo "Packaged $ROOT/$APP.zip (signature verified from the archive)"
+echo "Packaged $ROOT/$ZIP (signature verified from the archive)"
